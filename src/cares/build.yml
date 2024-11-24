@@ -1,5 +1,5 @@
 repo: https://github.com/c-ares/c-ares.git
-ver: 1.34.2
+ver: 1.34.3
 tag_prefix: 'v'
 tag_dot2ul: false
 cb_tool: cmake
