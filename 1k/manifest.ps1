@@ -8,5 +8,4 @@ if ($IsWin) {
 
 # since 3.1.60+, the llvm-19 compiling class template more strict
 $manifest['emsdk'] = '3.1.63+'
-$manifest['cmake'] = '3.29.3~3.30.2+'
-$manifest['msvc']  = '14.39.*'
+$manifest['cmake'] = '3.29.3~3.31.1+'

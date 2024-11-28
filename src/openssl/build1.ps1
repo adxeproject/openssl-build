@@ -99,7 +99,6 @@ $CONFIG_ALL_OPTIONS += "--prefix=$install_dir", "--openssldir=$install_dir"
 Write-Host ("CONFIG_ALL_OPTIONS=$CONFIG_ALL_OPTIONS, Count={0}" -f $CONFIG_ALL_OPTIONS.Count)
 
 if ($target_os.StartsWith('win')) {
-    setup_msvc
     perl Configure $CONFIG_ALL_OPTIONS
     perl configdata.pm --dump
     nmake install_sw

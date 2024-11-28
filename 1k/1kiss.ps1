@@ -194,7 +194,10 @@ $1k = [_1kiss]::new()
 # *              : any
 # x.y.z~x2.y2.z2 : range
 $manifest = @{
-    msvc         = '14.39+'; # cl.exe @link.exe 14.39 VS2022 17.9.x
+    # cl.exe @link.exe 14.39 VS2022 17.9.x
+    # exactly match format: '14.42.*'
+    msvc         = '14.39+';
+    vs           = '12.0+';
     ndk          = 'r23c';
     xcode        = '13.0.0+'; # range
     # _EMIT_STL_ERROR(STL1000, "Unexpected compiler version, expected Clang xx.x.x or newer.");
@@ -202,7 +205,7 @@ $manifest = @{
     # clang-cl msvc14.40 require 17.0.0+
     llvm         = '17.0.6+'; 
     gcc          = '9.0.0+';
-    cmake        = '3.23.0+';
+    cmake        = '3.23.0~3.31.1+';
     ninja        = '1.10.0+';
     python       = '3.8.0+';
     jdk          = '17.0.10+'; # jdk17+ works for android cmdlinetools 7.0+
@@ -210,9 +213,8 @@ $manifest = @{
     cmdlinetools = '7.0+'; # android cmdlinetools
 }
 
-# the default generator of unix targets: linux, osx, ios, android, wasm
+# the default generator requires explicit specified: osx, ios, android, wasm
 $cmake_generators = @{
-    'linux'   = 'Unix Makefiles'
     'android' = 'Ninja'
     'wasm'    = 'Ninja'
     'wasm64'  = 'Ninja'
@@ -251,6 +253,7 @@ $options = @{
     u      = $false # whether delete 1kdist cross-platform prebuilt folder: path/to/_x
     dm     = $false # dump compiler preprocessors
     i      = $false # perform install
+    scope  = 'local'
 }
 
 $optName = $null
@@ -457,19 +460,24 @@ if ($1k.isfile($manifest_file)) {
 # 1kdist
 $sentry_file = Join-Path $myRoot '.gitee'
 $mirror = if ($1k.isfile($sentry_file)) { 'gitee' } else { 'github' }
-$mirror_url_base = @{'github' = 'https://github.com/'; 'gitee' = 'https://gitee.com/' }[$mirror]
-$1kdist_url_base = $mirror_url_base
 $mirror_conf_file = $1k.realpath("$myRoot/../manifest.json")
 $mirror_current = $null
 $devtools_url_base = $null
 $1kdist_ver = $null
+
 if ($1k.isfile($mirror_conf_file)) {
     $mirror_conf = ConvertFrom-Json (Get-Content $mirror_conf_file -raw)
     $mirror_current = $mirror_conf.mirrors.$mirror
+    $mirror_url_base = "https://$($mirror_current.host)/"
+    $1kdist_url_base = $mirror_url_base
+
     $1kdist_url_base += $mirror_current.'1kdist'
     $devtools_url_base += "$1kdist_url_base/devtools"
     $1kdist_ver = $mirror_conf.versions.'1kdist'
     $1kdist_url_base += "/$1kdist_ver"
+} else {
+    $mirror_url_base = 'https://github.com/'
+    $1kdist_url_base = $mirror_url_base
 }
 
 function 1kdist_url($filename) {
@@ -597,7 +605,8 @@ function find_prog($name, $path = $null, $mode = 'ONLY', $cmd = $null, $params =
                 else {
                     if (!$preferredVer.Contains('*')) {
                         $checkVerCond = '$(version_eq $foundVer $preferredVer)'
-                    } else {
+                    }
+                    else {
                         $wildcardVer = $preferredVer
                         $preferredVer = $wildcardVer.TrimEnd('.*')
                         $checkVerCond = '$(version_like $foundVer $wildcardVer)'
@@ -752,6 +761,47 @@ function fetch_pkg($url, $exrep = $null) {
     if ($pfn_rename) { &$pfn_rename }
 }
 
+
+#
+# Find latest installed: Visual Studio 12 2013 +
+#   installationVersion
+#   installationPath
+#   instanceId: used for EnterDevShell
+# result:
+#   $Global:VS_INST
+#
+$Global:VS_INST = $null
+function find_vs() {
+    if (!$Global:VS_INST) {
+        $VSWHERE_EXE = "${env:ProgramFiles(x86)}\Microsoft Visual Studio\Installer\vswhere.exe"
+        $eap = $ErrorActionPreference
+        $ErrorActionPreference = 'SilentlyContinue'
+
+        $required_vs_ver = $manifest['vs']
+        if (!$required_vs_ver) { $required_vs_ver = '12.0+' }
+        
+        # refer: https://learn.microsoft.com/en-us/visualstudio/install/workload-and-component-ids?view=vs-2022
+        $require_comps = @('Microsoft.VisualStudio.Component.VC.Tools.x86.x64', 'Microsoft.VisualStudio.Product.BuildTools')
+        $vs_installs = ConvertFrom-Json "$(&$VSWHERE_EXE -version $required_vs_ver.TrimEnd('+') -format 'json' -requires $require_comps -requiresAny)"
+        $ErrorActionPreference = $eap
+
+        if ($vs_installs) {
+            $vs_inst_latest = $null
+            $vs_ver = ''
+            foreach ($vs_inst in $vs_installs) {
+                $inst_ver = [VersionEx]$vs_inst.installationVersion
+                if ($vs_ver -lt $inst_ver) {
+                    $vs_ver = $inst_ver
+                    $vs_inst_latest = $vs_inst
+                }
+            }
+            $Global:VS_INST = $vs_inst_latest
+        } else {
+            Write-Warning "Visual studio not found, your build may not work, required: $required_vs_ver"
+        }
+    }
+}
+
 # setup nuget, not add to path
 function setup_nuget() {
     if (!$manifest['nuget']) { return $null }
@@ -843,7 +893,7 @@ function setup_ninja() {
 }
 
 # setup cmake
-function setup_cmake($skipOS = $false, $scope = 'local') {
+function setup_cmake($skipOS = $false) {
     $cmake_prog, $cmake_ver = find_prog -name 'cmake'
     if ($cmake_prog -and (!$skipOS -or $cmake_prog.Contains($myRoot))) {
         return $cmake_prog, $cmake_ver
@@ -897,12 +947,13 @@ function setup_cmake($skipOS = $false, $scope = 'local') {
             }
         }
         elseif ($IsLinux) {
-            if ($scope -ne 'global') {
+            if ($option.scope -ne 'global') {
                 $1k.mkdirs($cmake_root)
                 & "$cmake_pkg_path" '--skip-license' '--exclude-subdir' "--prefix=$cmake_root" 1>$null 2>$null
             }
             else {
-                & "$cmake_pkg_path" '--skip-license' '--prefix=/usr/local' 1>$null 2>$null
+                $cmake_bin = '/usr/local/bin'
+                sudo bash "$cmake_pkg_path" '--skip-license' '--prefix=/usr/local' 1>$null 2>$null
             }
             if (!$?) { Remove-Item $cmake_pkg_path -Force }
         }
@@ -914,6 +965,7 @@ function setup_cmake($skipOS = $false, $scope = 'local') {
 
         $1k.println("Using cmake: $cmake_prog, version: $cmake_ver")
     }
+    
     $1k.addpath($cmake_bin)
     return $cmake_prog, $cmake_ver
 }
@@ -1229,17 +1281,21 @@ function setup_emsdk() {
 function setup_msvc() {
     $cl_prog, $cl_ver = find_prog -name 'msvc' -cmd 'cl' -silent $true -usefv $true
     if (!$cl_prog) {
-        if ($VS_INST) {
-            Import-Module "$VS_PATH\Common7\Tools\Microsoft.VisualStudio.DevShell.dll"
+        if ($Global:VS_INST) {
+            $vs_path = $Global:VS_INST.installationPath
             $dev_cmd_args = "-arch=$target_cpu -host_arch=x64 -no_logo"
+
+            # if explicit version specified, use it
             if (!$manifest['msvc'].EndsWith('+')) { $dev_cmd_args += " -vcvars_ver=$cl_ver" }
-            Enter-VsDevShell -VsInstanceId $VS_INST.instanceId -SkipAutomaticLocation -DevCmdArguments $dev_cmd_args
+
+            Import-Module "$vs_path\Common7\Tools\Microsoft.VisualStudio.DevShell.dll"
+            Enter-VsDevShell -VsInstanceId $Global:VS_INST.instanceId -SkipAutomaticLocation -DevCmdArguments $dev_cmd_args
 
             $cl_prog, $cl_ver = find_prog -name 'msvc' -cmd 'cl' -silent $true -usefv $true
             $1k.println("Using msvc: $cl_prog, version: $cl_ver")
         }
         else {
-            throw "Visual Studio not installed!"
+            Write-Warning "MSVC not found, your build may not work, required: $cl_ver"
         }
     }
 
@@ -1295,44 +1351,6 @@ function setup_gclient() {
     $env:DEPOT_TOOLS_WIN_TOOLCHAIN = 0
 }
 
-#
-# Find latest installed: Visual Studio 12 2013 +
-# installationVersion
-# instanceId EnterDevShell can use it
-# result:
-#   $Global:VS_VERSION
-#   $Global:VS_INST
-#   $Global:VS_PATH
-#
-$Global:VS_VERSION = $null
-$Global:VS_PATH = $null
-$Global:VS_INST = $null
-function find_vs_latest() {
-    $vs_version = [VersionEx]'12.0'
-    if (!$Global:VS_INST) {
-        $VSWHERE_EXE = "${env:ProgramFiles(x86)}\Microsoft Visual Studio\Installer\vswhere.exe"
-        $eap = $ErrorActionPreference
-        $ErrorActionPreference = 'SilentlyContinue'
-
-        $vs_installs = ConvertFrom-Json "$(&$VSWHERE_EXE -version '12.0' -format 'json')"
-        $ErrorActionPreference = $eap
-
-        if ($vs_installs) {
-            $vs_inst_latest = $null
-            foreach ($vs_inst in $vs_installs) {
-                $inst_ver = [VersionEx]$vs_inst.installationVersion
-                if ($vs_version -lt $inst_ver) {
-                    $vs_version = $inst_ver
-                    $vs_inst_latest = $vs_inst
-                }
-            }
-            $Global:VS_PATH = $vs_inst_latest.installationPath
-            $Global:VS_INST = $vs_inst_latest
-        }
-    }
-    $Global:VS_VERSION = $vs_version
-}
-
 # preprocess methods:
 #   <param>-inputOptions</param> [CMAKE_OPTIONS]
 function preprocess_win([string[]]$inputOptions) {
@@ -1348,13 +1366,15 @@ function preprocess_win([string[]]$inputOptions) {
         $arch = if ($options.a -eq 'x86') { 'Win32' } else { $options.a }
 
         # arch
-        if ($VS_VERSION -ge [VersionEx]'16.0') {
+        $vs_ver = [VersionEx]$Global:VS_INST.installationVersion
+        if ($vs_ver -ge [VersionEx]'16.0') {
             $outputOptions += '-A', $arch
             if ($TOOLCHAIN_VER) {
                 $outputOptions += "-Tv$TOOLCHAIN_VER"
             }
         }
         else {
+            if (!$TOOLCHAIN_VER) { $TOOLCHAIN_VER = "$($vs_ver.Major)0" }
             $gens = @{
                 '120' = 'Visual Studio 12 2013';
                 '140' = 'Visual Studio 14 2015'
@@ -1362,7 +1382,7 @@ function preprocess_win([string[]]$inputOptions) {
             }
             $Script:cmake_generator = $gens[$TOOLCHAIN_VER]
             if (!$Script:cmake_generator) {
-                throw "Unsupported toolchain: $TOOLCHAIN"
+                throw "Unsupported toolchain: $TOOLCHAIN$TOOLCHAIN_VER"
             }
             if ($options.a -eq "x64") {
                 $Script:cmake_generator += ' Win64'
@@ -1556,7 +1576,7 @@ $null = setup_glslcc
 $cmake_prog, $Script:cmake_ver = setup_cmake
 
 if ($Global:is_win_family) {
-    find_vs_latest
+    find_vs
     $nuget_prog = setup_nuget
 }
 
@@ -1573,7 +1593,7 @@ elseif ($Global:is_android) {
     $ninja_prog = setup_ninja
     # ensure ninja in cmake_bin
     if (!(ensure_cmake_ninja $cmake_prog $ninja_prog)) {
-        $cmake_prog, $Script:cmake_ver = setup_cmake -Force
+        $cmake_prog, $Script:cmake_ver = setup_cmake -skipOS $true
         if (!(ensure_cmake_ninja $cmake_prog $ninja_prog)) {
             $1k.println("Ensure ninja in cmake bin directory fail")
         }
@@ -1602,6 +1622,7 @@ elseif ($Global:is_wasm) {
 }
 
 $is_host_target = $Global:is_win32 -or $Global:is_linux -or $Global:is_mac
+$is_host_cpu = $HOST_CPU -eq $TARGET_CPU
 
 if (!$setupOnly) {
     $BUILD_DIR = $null
@@ -1609,7 +1630,12 @@ if (!$setupOnly) {
 
     function resolve_out_dir($prefix) {
         if ($is_host_target) {
-            $out_dir = "${prefix}${TARGET_CPU}"
+            if (!$is_host_cpu) {
+                $out_dir = "${prefix}${TARGET_CPU}"
+            }
+            else {
+                $out_dir = $prefix.TrimEnd("_")
+            }
         }
         else {
             $out_dir = "${prefix}${TARGET_OS}"
@@ -1720,7 +1746,7 @@ if (!$setupOnly) {
                 }
             }
 
-            if (!$cmake_generator -and !$TARGET_OS.StartsWith('win')) {
+            if (!$cmake_generator -and !$TARGET_OS.StartsWith('win') -and $TARGET_OS -ne 'linux') {
                 $cmake_generator = $cmake_generators[$TARGET_OS]
                 if ($null -eq $cmake_generator) {
                     $cmake_generator = if (!$IsWin) { 'Unix Makefiles' } else { 'Ninja' }

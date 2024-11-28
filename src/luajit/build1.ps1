@@ -3,7 +3,6 @@ $target_cpu = $args[1]
 # $install_dir = $args[2]
 
 if ($is_win_family) {
-    setup_msvc
     if ($rebuild) {
         git clean -d -fx
     }
