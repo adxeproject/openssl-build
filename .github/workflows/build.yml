@@ -289,9 +289,9 @@ jobs:
       # Checks-out your repository under $GITHUB_WORKSPACE, so your job can access it
       - uses: actions/checkout@v4
 
-      - name: setup-msvc
-        shell: pwsh
-        run: .\1k\setup-msvc.ps1 -ver $env:TOOLSET -arch $env:BUILD_ARCH
+      # - name: setup-msvc
+      #   shell: pwsh
+      #   run: .\1k\setup-msvc.ps1 -ver $env:TOOLSET -arch $env:BUILD_ARCH
 
       - name: Build
         shell: pwsh
@@ -323,9 +323,9 @@ jobs:
       # Checks-out your repository under $GITHUB_WORKSPACE, so your job can access it
       - uses: actions/checkout@v4
 
-      - name: setup-msvc
-        shell: pwsh
-        run: .\1k\setup-msvc.ps1 -ver $env:TOOLSET -arch $env:BUILD_ARCH
+      # - name: setup-msvc
+      #   shell: pwsh
+      #   run: .\1k\setup-msvc.ps1 -ver $env:TOOLSET -arch $env:BUILD_ARCH
 
       - name: Build
         shell: pwsh
