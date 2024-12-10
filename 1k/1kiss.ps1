@@ -1881,8 +1881,7 @@ if (!$setupOnly) {
                     # apply additional build options
                     $BUILD_ALL_OPTIONS += "--parallel", "$($options.j)"
 
-                    if ($options.t) { $cmake_target = $options.t }
-                    if ($cmake_target) { $BUILD_ALL_OPTIONS += '--target', $cmake_target }
+                    
                     $1k.println("BUILD_ALL_OPTIONS=$BUILD_ALL_OPTIONS, Count={0}" -f $BUILD_ALL_OPTIONS.Count)
 
                     # forward non-cmake args to underlaying build toolchain, must at last
@@ -1890,12 +1889,25 @@ if (!$setupOnly) {
                         $BUILD_ALL_OPTIONS += '--', '-quiet'
                     }
                     $1k.println("cmake --build $BUILD_DIR $BUILD_ALL_OPTIONS")
-                    cmake --build $BUILD_DIR $BUILD_ALL_OPTIONS | Out-Host
-                    if (!$?) {
-                        Set-Location $stored_cwd
-                        exit $LASTEXITCODE
-                    }
 
+                    if ($options.t) { $cmake_target = $options.t }
+                    if ($cmake_target) { 
+                        $cmake_targets = $cmake_target.Split(',') | Sort-Object | Get-Unique
+                        foreach ($target in $cmake_targets) {
+                            cmake --build $BUILD_DIR $BUILD_ALL_OPTIONS --target $target | Out-Host
+                            if (!$?) {
+                                Set-Location $stored_cwd
+                                exit $LASTEXITCODE
+                            }
+                        }
+                    } else {
+                        cmake --build $BUILD_DIR $BUILD_ALL_OPTIONS | Out-Host
+                        if (!$?) {
+                            Set-Location $stored_cwd
+                            exit $LASTEXITCODE
+                        }
+                    }
+                    
                     if ($options.i) {
                         $install_args = @($BUILD_DIR, '--config', $optimize_flag)
                         cmake --install $install_args | Out-Host
