@@ -1,5 +1,5 @@
-repo: https://github.com/libjpeg-turbo/libjpeg-turbo/releases/download/3.0.4/libjpeg-turbo-3.0.4.tar.gz
-ver: 3.0.4
+repo: https://github.com/libjpeg-turbo/libjpeg-turbo/releases/download/3.1.0/libjpeg-turbo-3.1.0.tar.gz
+ver: 3.1.0
 tag_prefix: ''
 tag_dot2ul: false
 cb_tool: cmake

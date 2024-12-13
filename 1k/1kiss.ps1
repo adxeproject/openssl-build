@@ -84,6 +84,13 @@ $Global:EXE_SUFFIX = @('', '.exe')[$IsWin]
 
 $Script:cmake_generator = $null
 
+# perfer utf-8 encoding
+if ($Global:IsWin) {
+    if (!$OutputEncoding -or $OutputEncoding.CodePage -ne 65001) { 
+        $OutputEncoding = [console]::InputEncoding = [console]::OutputEncoding = New-Object System.Text.UTF8Encoding
+    }
+}
+
 # import VersionEx
 . (Join-Path $PSScriptRoot 'extensions.ps1')
 
@@ -475,7 +482,8 @@ if ($1k.isfile($mirror_conf_file)) {
     $devtools_url_base += "$1kdist_url_base/devtools"
     $1kdist_ver = $mirror_conf.versions.'1kdist'
     $1kdist_url_base += "/$1kdist_ver"
-} else {
+}
+else {
     $mirror_url_base = 'https://github.com/'
     $1kdist_url_base = $mirror_url_base
 }
@@ -796,7 +804,8 @@ function find_vs() {
                 }
             }
             $Global:VS_INST = $vs_inst_latest
-        } else {
+        }
+        else {
             Write-Warning "Visual studio not found, your build may not work, required: $required_vs_ver"
         }
     }
@@ -1320,8 +1329,6 @@ function setup_xcode() {
 
 # google gn build system, current windows only for build angleproject/dawn on windows
 function setup_gclient() {
-    $OutputEncoding = [console]::InputEncoding = [console]::OutputEncoding = New-Object System.Text.UTF8Encoding
-
     if (!$ninja_prog) {
         $ninja_prog = setup_ninja
     }
