@@ -94,11 +94,16 @@ def _LoadEnvFromBat(args):
   args = args[:]
   args.extend(('&&', 'set'))
   popen = subprocess.Popen(
-      args, shell=True, stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
-  variables, _ = popen.communicate()
+      args, shell=True, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True)
+  stdout, stderr = popen.communicate()
   if popen.returncode != 0:
-    raise Exception('"%s" failed with error %d' % (args, popen.returncode))
-  return variables.decode(errors='ignore')
+    errmsg = ''
+    if stdout:
+      errmsg += stdout
+    if stderr:
+      errmsg += stderr
+    raise Exception('"%s" failed with error %d : !%s!' % (args, popen.returncode, errmsg))
+  return stdout # stdout.decode(errors='ignore')
 
 
 def _LoadToolchainEnv(cpu, toolchain_root, sdk_dir, target_store):
