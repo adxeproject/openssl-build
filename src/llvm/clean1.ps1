@@ -5,6 +5,5 @@ if ((Test-Path $install_dir -PathType Container)) {
     sremove (Join-Path $install_dir 'include')
     sremove (Join-Path $install_dir 'lib/*.lib')
     sremove (Join-Path $install_dir 'lib/*.a')
-    sremove (Join-Path $install_dir 'bin/*.exe')
     ls -R "$install_dir"
 }

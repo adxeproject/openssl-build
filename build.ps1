@@ -151,6 +151,9 @@ if ($is_darwin_family) {
 $compiler_dumped = $false
 
 Foreach ($lib_name in $libs) {
+    $lib_info = $lib_name.Split(':')
+    $lib_name = $lib_info[0]
+    $cb_target = $lib_info[1]
     $build_conf_path = Join-Path $_1k_root "src/$lib_name/build.yml"
     $build_conf = ConvertFrom-Yaml -Yaml (Get-Content $build_conf_path -raw)
     if ($build_conf.targets -and !$build_conf.targets.contains($target_os)) {
@@ -226,6 +229,10 @@ Foreach ($lib_name in $libs) {
         }
     }
 
+    if ($build_conf.repo.EndsWith('.git') -and $rebuild) {
+        git -C $lib_src clean -dfx -e _1kiss
+    }
+
     $install_script = Join-Path $_1k_root "src/$lib_name/install1.ps1"
     $has_custom_install = (Test-Path $install_script)
 
@@ -234,6 +241,10 @@ Foreach ($lib_name in $libs) {
     $install_dir = Join-Path $install_root $lib_name
     mkdirs $install_dir
     Set-Variable -Name "${lib_name}_install_dir" -Value $install_dir -Scope Global
+
+    if(!$cb_target) {
+        $cb_target = $build_conf.cb_target
+    }
     if ($build_conf.cb_tool -ne 'custom') {
         $_config_options = $build_conf.options
         if ($build_conf.cb_tool -eq 'cmake') {
@@ -247,8 +258,8 @@ Foreach ($lib_name in $libs) {
 
             $_config_options += "-DCMAKE_INSTALL_PREFIX=$install_dir"
             $evaluated_args = @()
-            if ($build_conf.cb_target) {
-                $evaluated_args += '-t', $build_conf.cb_target
+            if ($cb_target) {
+                $evaluated_args += '-t', $cb_target
             }
             if (!$has_custom_install) {
                 $evaluated_args += '-i'
@@ -261,7 +272,7 @@ Foreach ($lib_name in $libs) {
             &$1k_script -p $target_os -a $target_cpu -xc $_config_options @forward_args @evaluated_args @args
         }
         elseif ($is_gn) {
-            &$1k_script -p $target_os -a $target_cpu -xc $_config_options -xt 'gn' -t "$($build_conf.cb_target)" @forward_args @args
+            &$1k_script -p $target_os -a $target_cpu -xc $_config_options -xt 'gn' -t "$($cb_target)" @forward_args @args
         }
         else {
             throw "Unsupported cross build tool: $($build_conf.cb_tool)"
@@ -272,6 +283,9 @@ Foreach ($lib_name in $libs) {
         . $custom_build_script $target_os $target_cpu $install_dir @forward_args
     }
     Pop-Location
+    if ($LASTEXITCODE) {
+        throw "Build $lib_name failed"
+    }
 
     # custom install step
     if ($has_custom_install) {
