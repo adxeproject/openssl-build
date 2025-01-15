@@ -363,7 +363,7 @@ jobs:
 
       - name: Build
         shell: pwsh
-        run: if ('${{ github.event.inputs.libs }}' -eq ''){ ./build.ps1 -p wasm64 -a '*' -libs 'openssl' } else { ./build.ps1 -p wasm64 -a '*' -libs '${{ github.event.inputs.libs }}' }
+        run: if ('${{ github.event.inputs.libs }}' -eq ''){ ./build.ps1 -p wasm64 -a '*' -libs 'zlib,openssl' } else { ./build.ps1 -p wasm64 -a '*' -libs '${{ github.event.inputs.libs }}' }
 
       - name: Upload
         uses: actions/upload-artifact@v4
