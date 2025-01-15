@@ -65,6 +65,8 @@ param(
 
 $myRoot = $PSScriptRoot
 
+$ErrorActionPreference = 'Stop'
+
 $HOST_WIN = 0 # targets: win,uwp,android
 $HOST_LINUX = 1 # targets: linux,android
 $HOST_MAC = 2 # targets: android,ios,osx(macos),tvos,watchos
@@ -243,6 +245,7 @@ $channels = @{}
 $cmdlinetools_rev = '11076708' # 12.0
 
 $ndk_r23d_rev = '12186248'
+# $ndk_r25d_rev = '12161346'
 
 $android_sdk_tools = @{
     'build-tools' = '34.0.0'
@@ -269,6 +272,7 @@ $options = @{
     dm     = $false # dump compiler preprocessors
     i      = $false # perform install
     scope  = 'local'
+    aab    = $false
 }
 
 $optName = $null
@@ -318,7 +322,7 @@ if ($options.xb.GetType() -eq [string]) {
     $options.xb = $options.xb.Split(' ')
 }
 
-$pwsh_ver = $PSVersionTable.PSVersion.ToString()
+[VersionEx]$pwsh_ver = [Regex]::Match($PSVersionTable.PSVersion.ToString(), '(\d+\.)+(\*|\d+)').Value
 if ([VersionEx]$pwsh_ver -lt [VersionEx]"7.0") {
     [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12
 }
@@ -656,7 +660,7 @@ function find_prog($name, $path = $null, $mode = 'ONLY', $cmd = $null, $params =
             $verStr = $(. $cmd @params 2>$null) | Select-Object -First 1
             if ($LASTEXITCODE) {
                 Write-Warning "1kiss: Get version of $cmd fail"
-                $LASTEXITCODE = 0
+                $Global:LASTEXITCODE = 0
             }
             if (!$verStr -or $verStr.Contains('--version')) {
                 $verInfo = $cmd_info.Version
@@ -737,7 +741,7 @@ function download_and_expand($url, $out, $dest) {
             tar xf "$out" -C $dest | Out-Host
         }
         elseif ($out.EndsWith('.7z') -or $out.EndsWith('.exe')) {
-            7z x "$out" "-o$dest" -bsp1 -snld -y | Out-Host
+            7z x "$out" "-o$dest" -bsp1 -y | Out-Host
         }
         elseif ($out.EndsWith('.sh')) {
             chmod 'u+x' "$out" | Out-Host
@@ -1490,9 +1494,8 @@ function setup_gclient() {
 }
 
 # preprocess methods:
-#   <param>-inputOptions</param> [CMAKE_OPTIONS]
-function preprocess_win([string[]]$inputOptions) {
-    $outputOptions = $inputOptions
+function preprocess_win() {
+    $outputOptions = @()
 
     if ($options.sdk) {
         $outputOptions += "-DCMAKE_SYSTEM_VERSION=$($options.sdk)"
@@ -1547,21 +1550,22 @@ function preprocess_win([string[]]$inputOptions) {
         # Generate mingw
         $Script:cmake_generator = 'Ninja Multi-Config'
     }
-    return $outputOptions
+    # refer: https://devblogs.microsoft.com/powershell/array-literals-in-powershell
+    return ,$outputOptions
 }
 
-function preprocess_linux([string[]]$inputOptions) {
-    $outputOptions = $inputOptions
+function preprocess_linux() {
+    $outputOptions = @()
     if ($Global:is_clang) {
         $outputOptions += '-DCMAKE_C_COMPILER=clang', '-DCMAKE_CXX_COMPILER=clang++'
     }
-    return $outputOptions
+    return ,$outputOptions
 }
 
 $ninja_prog = $null
 $is_gradlew = $options.xt.Contains('gradlew')
-function preprocess_andorid([string[]]$inputOptions) {
-    $outputOptions = $inputOptions
+function preprocess_andorid() {
+    $outputOptions = @()
 
     $t_archs = @{arm64 = 'arm64-v8a'; armv7 = 'armeabi-v7a'; x64 = 'x86_64'; x86 = 'x86'; }
 
@@ -1601,11 +1605,11 @@ function preprocess_andorid([string[]]$inputOptions) {
         $outputOptions += '-DCMAKE_FIND_ROOT_PATH_MODE_PROGRAM=NEVER'
     }
 
-    return $outputOptions
+    return ,$outputOptions
 }
 
-function preprocess_osx([string[]]$inputOptions) {
-    $outputOptions = $inputOptions
+function preprocess_osx() {
+    $outputOptions = @()
     $arch = $options.a
     if ($arch -eq 'x64') {
         $arch = 'x86_64'
@@ -1615,12 +1619,12 @@ function preprocess_osx([string[]]$inputOptions) {
     if ($Global:target_minsdk) {
         $outputOptions += "-DCMAKE_OSX_DEPLOYMENT_TARGET=$Global:target_minsdk"
     }
-    return $outputOptions
+    return ,$outputOptions
 }
 
 # build ios famliy (ios,tvos,watchos)
-function preprocess_ios([string[]]$inputOptions) {
-    $outputOptions = $inputOptions
+function preprocess_ios() {
+    $outputOptions = @()
     $arch = $options.a
     if ($arch -eq 'x64') {
         $arch = 'x86_64'
@@ -1638,12 +1642,11 @@ function preprocess_ios([string[]]$inputOptions) {
             $outputOptions += '-DSIMULATOR=TRUE'
         }
     }
-    return $outputOptions
+    return ,$outputOptions
 }
 
-function preprocess_wasm([string[]]$inputOptions) {
-    if ($options.p -eq 'wasm64') { $inputOptions += '-DCMAKE_C_FLAGS="-Wno-experimental -sMEMORY64"', '-DCMAKE_CXX_FLAGS="-Wno-experimental -sMEMORY64"', '-DEMSCRIPTEN_SYSTEM_PROCESSOR=x86_64' }
-    return $inputOptions
+function preprocess_wasm() {
+    return ,@()
 }
 
 function validHostAndToolchain() {
@@ -1692,7 +1695,7 @@ function validHostAndToolchain() {
     }
 }
 
-$proprocessTable = @{
+$preprocessTable = @{
     'win32'   = ${function:preprocess_win};
     'winrt'   = ${function:preprocess_win};
     'linux'   = ${function:preprocess_linux};
@@ -1760,6 +1763,7 @@ elseif ($Global:is_wasm) {
 
 $is_host_target = $Global:is_win32 -or $Global:is_linux -or $Global:is_mac
 $is_host_cpu = $HOST_CPU -eq $TARGET_CPU
+$cmake_target = $null
 
 if (!$setupOnly) {
     $BUILD_DIR = $null
@@ -1825,7 +1829,17 @@ if (!$setupOnly) {
         $1k.println("Building target $TARGET_OS on $HOST_OS_NAME with toolchain $TOOLCHAIN ...")
 
         # step1. preprocess cross make options
-        $CONFIG_ALL_OPTIONS = [array]$(& $proprocessTable[$TARGET_OS] -inputOptions @() )
+        $CONFIG_ALL_OPTIONS = & $preprocessTable[$TARGET_OS]
+
+        if (!$is_win_family) {
+            $cm_cflags = '-fPIC'
+            if ($TARGET_OS -eq 'wasm64') {
+                $cm_cflags += ' -sMEMORY64'
+                $CONFIG_ALL_OPTIONS += '-DEMSCRIPTEN_SYSTEM_PROCESSOR=x86_64', '-DCMAKE_CXX_FLAGS=-sMEMORY64'
+            }
+
+            $CONFIG_ALL_OPTIONS += "-DCMAKE_C_FLAGS=$cm_cflags"
+        }
 
         if (!$CONFIG_ALL_OPTIONS) {
             $CONFIG_ALL_OPTIONS = @()
@@ -1949,11 +1963,12 @@ if (!$setupOnly) {
             $build_tool_dir = Split-Path $build_tool -Parent
             Push-Location $build_tool_dir
             if (!$configOnly) {
+                $build_task = @('assemble', 'bundle')[$options.aab]
                 if ($optimize_flag -eq 'Debug') {
-                    & $build_tool assembleDebug $CONFIG_ALL_OPTIONS | Out-Host
+                    & $build_tool ${build_task}Debug $CONFIG_ALL_OPTIONS | Out-Host
                 }
                 else {
-                    & $build_tool assembleRelease $CONFIG_ALL_OPTIONS | Out-Host
+                    & $build_tool ${build_task}Release $CONFIG_ALL_OPTIONS | Out-Host
                 }
             }
             else {
@@ -2027,10 +2042,25 @@ if (!$setupOnly) {
                         $forward_options += '--', '-quiet'
                     }
 
-                    if ($options.t) { $cmake_target = $options.t }
-                    if ($cmake_target) {
-                        $cmake_targets = $cmake_target.Split(',')
-                        foreach ($target in $cmake_targets) {
+                    $cm_targets = $options.t
+
+                    if($cm_targets) {
+                        if($cm_targets -isnot [array]) {
+                            $cm_targets = "$cm_targets".Split(',')
+                        }
+                    } else {
+                        $cm_targets = @()
+                    }
+                    if($cmake_target) {
+                        if ($cm_targets.Contains($cmake_target)) {
+                            $cm_targets += $cmake_target
+                        }
+                    } else {
+                        $cmake_target = $cm_targets[-1]
+                    }
+
+                    if ($cm_targets) {
+                        foreach ($target in $cm_targets) {
                             $1k.println("cmake --build $BUILD_DIR $BUILD_ALL_OPTIONS --target $target")
                             cmake --build $BUILD_DIR $BUILD_ALL_OPTIONS --target $target $forward_options | Out-Host
                             if (!$?) {

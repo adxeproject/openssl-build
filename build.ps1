@@ -216,14 +216,15 @@ Foreach ($lib_name in $libs) {
     $patch_script = Join-Path $_1k_root "src/$lib_name/patch1.ps1"
     if (Test-Path $patch_script -PathType Leaf) {
         &$patch_script $lib_src
-    } else {
-        if(!(Test-Path (Join-Path $lib_src '.git') -PathType Container)) {
+    }
+    else {
+        if (!(Test-Path (Join-Path $lib_src '.git') -PathType Container)) {
             mkdirs (Join-Path $lib_src '.git/objects')
             mkdirs (Join-Path $lib_src '.git/refs')
             Write-Output "ref: refs/heads/master" >(Join-Path $lib_src '.git/HEAD')
         }
         $patches = Get-ChildItem (Split-Path $patch_script -Parent) -Filter '*.patch'
-        foreach($patch_file in $patches) {
+        foreach ($patch_file in $patches) {
             println "apply patch: $patch_file"
             git -C $lib_src apply --verbose --ignore-whitespace $patch_file
         }
@@ -242,7 +243,7 @@ Foreach ($lib_name in $libs) {
     mkdirs $install_dir
     Set-Variable -Name "${lib_name}_install_dir" -Value $install_dir -Scope Global
 
-    if(!$cb_target) {
+    if (!$cb_target) {
         $cb_target = $build_conf.cb_target
     }
     if ($build_conf.cb_tool -ne 'custom') {
@@ -251,11 +252,7 @@ Foreach ($lib_name in $libs) {
             if ($is_winrt) {
                 $_config_options += "-DCMAKE_VS_WINDOWS_TARGET_PLATFORM_MIN_VERSION=$env:VS_DEPLOYMENT_TARGET"
             }
-
-            if (!$is_win_family) {
-                $_config_options += '-DCMAKE_C_FLAGS=-fPIC'
-            }
-
+            
             $_config_options += "-DCMAKE_INSTALL_PREFIX=$install_dir"
             $evaluated_args = @()
             if ($cb_target) {
