@@ -1,5 +1,5 @@
 repo: https://github.com/llvm/llvm-project.git
-ver: 19.1.6
+ver: 19.1.7
 tag_prefix: llvmorg-
 tag_dot2ul: false
 cb_tool: cmake
