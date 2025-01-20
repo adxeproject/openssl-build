@@ -40,7 +40,7 @@ else {
         if ( !(Test-Path "${NDKCROSS}strip" -PathType Leaf) ) {
             ln $NDKBIN/llvm-strip ${NDKCROSS}strip
         }
-        $CONFIG_TARGET = @("HOST_CC=$HOST_CC", "CROSS=$NDKCROSS", "STATIC_CC=$NDKCC", "DYNAMIC_CC=$NDKCC -fPIC", "TARGET_LD=$NDKCC", "TARGET_SYS=`"Linux`"")
+        $CONFIG_TARGET = @("HOST_CC=$HOST_CC", "CROSS=$NDKCROSS", "STATIC_CC=$NDKCC", "DYNAMIC_CC=$NDKCC -fPIC", "TARGET_LD=$NDKCC")
     }
     elseif ($is_darwin_family) {
         if ($Global:is_mac) {
