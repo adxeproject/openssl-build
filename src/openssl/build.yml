@@ -1,5 +1,5 @@
-repo: https://github.com/openssl/openssl/releases/download/openssl-3.0.15/openssl-3.0.15.tar.gz
-ver: 3.0.15
+repo: https://github.com/openssl/openssl/releases/download/openssl-3.0.16/openssl-3.0.16.tar.gz
+ver: 3.0.16
 tag_prefix: openssl-
 tag_dot2ul: false
 cb_tool: custom

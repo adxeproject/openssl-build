@@ -1,9 +1,9 @@
-repo: https://curl.se/download/curl-8.11.1.zip
-ver: 8.11.1
+repo: https://curl.se/download/curl-8.12.1.zip
+ver: 8.12.1
 tag_prefix: curl-
 tag_dot2ul: true
 cb_tool: cmake
-options: -DZLIB_ROOT=$zlib_install_dir -DUSE_NGHTTP2=OFF -DCURL_DISABLE_LDAP=TRUE -DUSE_LIBIDN2=FALSE -DCURL_USE_LIBSSH2=FALSE -DBUILD_CURL_EXE=FALSE -DCURL_DISABLE_TESTS=TRUE -DCURL_USE_OPENSSL=TRUE -DOPENSSL_ROOT_DIR=$openssl_install_dir
+options: -DZLIB_ROOT=$zlib_install_dir -DCURL_USE_LIBPSL=OFF -DUSE_NGHTTP2=OFF -DCURL_DISABLE_LDAP=TRUE -DUSE_LIBIDN2=FALSE -DCURL_USE_LIBSSH2=FALSE -DBUILD_CURL_EXE=FALSE -DCURL_DISABLE_TESTS=TRUE -DCURL_USE_OPENSSL=TRUE -DOPENSSL_ROOT_DIR=$openssl_install_dir
 options_cross: -DCMAKE_FIND_ROOT_PATH=$openssl_install_dir
 options_unix: -DBUILD_SHARED_LIBS=OFF
 options_msw: -DBUILD_SHARED_LIBS=ON
